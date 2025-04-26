@@ -1,0 +1,194 @@
+import asyncio
+from time import sleep
+from dualsense_controller import DualSenseController
+import websockets
+
+# config
+ESP_WS_URL = "ws://192.168.4.1/ws"
+RUMBLE_STOP = 0
+RUMBLE_DEFAULT = 255
+
+# global
+data_changed = False
+left_trigger = 0.0
+right_trigger = 0.0
+left_stick_x = 0.0
+
+# list availabe devices and throw exception when tzhere is no device detected
+device_infos = DualSenseController.enumerate_devices()
+if len(device_infos) < 1:
+    raise Exception("No DualSense Controller available.")
+
+# flag, which keeps program alive
+is_running = True
+
+# create an instance, use first available device
+controller = DualSenseController()
+
+
+# switches the keep alive flag, which stops the below loop
+def stop():
+    global is_running
+    is_running = False
+
+
+def rumble_start(value: int = RUMBLE_DEFAULT):
+    controller.left_rumble.set(value)
+    controller.right_rumble.set(value)
+
+
+def rumble_stop(value: int = RUMBLE_STOP):
+    controller.left_rumble.set(value)
+    controller.right_rumble.set(value)
+
+
+def lightbar():
+    global left_trigger, right_trigger, left_stick_x
+
+    if left_trigger != 0.0:
+        controller.lightbar.set_color_red()
+    elif right_trigger != 0.0:
+        controller.lightbar.set_color_green()
+    elif left_stick_x != 0.0:
+        controller.lightbar.set_color_white()
+    else:
+        controller.lightbar.set_color_blue()
+
+
+def rumble():
+    global left_trigger, left_stick_x
+
+    if left_trigger != 0.0 or abs(left_stick_x) >= 0.9:
+        rumble_start()
+    else:
+        rumble_stop()
+
+
+def on_left_trigger(value):
+    # print(f"left trigger changed: {value}")
+    global data_changed, left_trigger
+    left_trigger = value
+    data_changed = True
+
+    rumble()
+    lightbar()
+
+
+def on_right_trigger(value):
+    # print(f"right trigger changed: {value}")
+    global data_changed, right_trigger
+    right_trigger = value
+    data_changed = True
+
+    lightbar()
+
+
+def on_left_stick_x_changed(value):
+    # print(f"on_left_stick_x_changed: {value}")
+    global data_changed, left_stick_x
+    left_stick_x = value
+    data_changed = True
+
+    rumble()
+    lightbar()
+
+
+# callback, when PlayStation button is pressed
+# stop program
+def on_ps_btn_pressed():
+    print("PS button released -> stop")
+    stop()
+
+
+# callback, when unintended error occurs,
+# i.e. physically disconnecting the controller during operation
+# stop program
+def on_error(error):
+    print(f"Opps! an error occured: {error}")
+    stop()
+
+
+controller.left_trigger.on_change(on_left_trigger)
+controller.right_trigger.on_change(on_right_trigger)
+controller.left_stick_x.on_change(on_left_stick_x_changed)
+
+# register the button callbacks
+controller.btn_ps.on_down(on_ps_btn_pressed)
+
+# register the error callback
+controller.on_error(on_error)
+
+
+def serialize_data():
+    global left_trigger, right_trigger, left_stick_x
+    left_trigger_serialized = int(left_trigger * 255)
+    right_trigger_serialized = int(right_trigger * 255)
+    l_pwm = r_pwm = 0
+    in1 = in2 = in3 = in4 = 0
+
+    if left_trigger > 0:
+        l_pwm = r_pwm = left_trigger_serialized
+        in1 = in4 = 0
+        in2 = in3 = 1
+    else:
+        if right_trigger > 0:
+            l_pwm = r_pwm = right_trigger_serialized
+            in1 = in4 = 1
+            in2 = in3 = 0
+    if left_stick_x > 0:
+        r_pwm = int(r_pwm * (1 - left_stick_x))
+    elif left_stick_x < 0:
+        l_pwm = int(l_pwm * (1 + left_stick_x))
+
+    return [l_pwm, in1, in2, r_pwm, in3, in4]
+
+
+# def serialize_data():
+#     global left_trigger, right_trigger, left_stick_x
+#     l_pwm = r_pwm = 0
+#     in1 = in2 = in3 = in4 = 0
+#     if left_trigger > 0:
+#         l_pwm = r_pwm = int(left_trigger * 255)
+#         in1 = in3 = 1
+#         in2 = in4 = 0
+#     elif right_trigger > 0:
+#         l_pwm = r_pwm = int(right_trigger * 255)
+#         in1 = in4 = 1
+#         in2 = in3 = 0
+#     if left_stick_x > 0:
+#         l_pwm = max(0, l_pwm - int(left_stick_x * 255))
+#     elif left_stick_x < 0:
+#         r_pwm = max(0, r_pwm + int(left_stick_x * 255))
+#     return [l_pwm, in1, in2, r_pwm, in3, in4]
+
+
+async def main():
+    global is_running, data_changed
+
+    print("Connecting to ESP...")
+    # ws = await websockets.connect(ESP_WS_URL)
+    print("ESP connected")
+
+    print("Connecting to DualSense...")
+    controller.activate()
+    controller.lightbar.set_color_blue()
+    print("DualSense activated!")
+
+    try:
+        while is_running:
+            if data_changed:
+                controller_data = serialize_data()
+                message = ",".join(map(str, controller_data))
+                # await ws.send(message)
+                data_changed = False
+                print(message)
+            # await asyncio.sleep(0.01)
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        print("Disconnecting...")
+        # await ws.close()
+        controller.deactivate()
+
+
+asyncio.run(main())
