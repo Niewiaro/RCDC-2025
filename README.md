@@ -1,6 +1,6 @@
 <a id="readme-top"></a>
 
-# 🚗 RCDC 2025 — Zwycięski Projekt Zdalnie Sterowanego Samochodu
+# 🚗 RCDC 2025 — (Winner Edition)
 
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
@@ -66,6 +66,10 @@ Projekt został wybrany jako **zwycięski** w kategorii Remote Car Development. 
 
 ## 📷 Zdjęcia
 
+![Czterej Pancerni i Piec](media/54491749940_f9295360b8_o.jpg)
+![Pure Fun <3](media/54491675963_631c8734d7_o.jpg)
+![Przejazd konkursowy](media/54491595039_f51e4b2800_o.jpg)
+![Zwycięstwo!](media/54491391556_70626497d5_o.jpg)
 
 <p align="right">(<a href="#readme-top">powrót na górę</a>)</p>
 
